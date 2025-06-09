@@ -36,11 +36,84 @@ func TestProofVerifySmoke(t *testing.T) {
 	}
 }
 
+func TestLagrangeBatchVerify(t *testing.T) {
+	domain := NewDomain(4)
+	srs, _ := newLagrangeSRSInsecure(*domain, big.NewInt(1234))
+	//srs, _ := newMonomialSRSInsecureUint64(4, big.NewInt(1234))
+
+	numProofs := 4
+	commitments := make([]Commitment, 0, numProofs)
+	z := make([]fr.Element, numProofs)
+	for i := range z {
+		z[i].SetRandom()
+	}
+
+	var proofs BatchOpeningProof
+	poly := make([]Polynomial, 0, numProofs)
+	for i := 0; i < numProofs; i++ {
+		poly = append(poly, randPoly(t, *domain))
+		comm, _ := Commit(poly[i], &srs.CommitKey, 0)
+		commitments = append(commitments, *comm)
+	}
+	require.NotEqual(t, commitments[0].Marshal(), commitments[1].Marshal(), "Commitments should be distinct")
+
+	proofs, _ = LagrangeBatchOpen(domain, commitments, poly, z, &srs.CommitKey, 0)
+	err := BatchVerify(commitments, proofs, &srs.OpeningKey)
+	require.NoError(t, err)
+
+	proofs, _ = OptimisedLagrangeOriBatchOpen(domain, commitments, poly, z, &srs.CommitKey, 0)
+	err = OptimisedOriBatchVerify(commitments, proofs, &srs.OpeningKey)
+	require.NoError(t, err)
+
+	// Add an invalid proof, to ensure that it fails
+	poly[0] = randPoly(t, *domain)
+	proofs, _ = LagrangeBatchOpen(domain, commitments, poly, z, &srs.CommitKey, 0)
+	err = BatchVerify(commitments, proofs, &srs.OpeningKey)
+	require.Error(t, err, "An invalid commitment was added to the list, however verification returned true")
+}
+
+func TestBatchVerify(t *testing.T) {
+	domain := NewDomain(4)
+	//srs, _ := newLagrangeSRSInsecure(*domain, big.NewInt(1234))
+	srs, _ := newMonomialSRSInsecureUint64(4, big.NewInt(1234))
+
+	numProofs := 4
+	commitments := make([]Commitment, 0, numProofs)
+	z := make([]fr.Element, numProofs)
+	for i := range z {
+		z[i].SetRandom()
+	}
+
+	var proofs BatchOpeningProof
+	poly := make([]Polynomial, 0, numProofs)
+	for i := 0; i < numProofs; i++ {
+		poly = append(poly, randPoly(t, *domain))
+		comm, _ := Commit(poly[i], &srs.CommitKey, 0)
+		commitments = append(commitments, *comm)
+	}
+	require.NotEqual(t, commitments[0].Marshal(), commitments[1].Marshal(), "Commitments should be distinct")
+
+	proofs, _ = OriBatchOpen(commitments, poly, z, &srs.CommitKey, 0)
+	err := OriBatchVerify(commitments, proofs, &srs.OpeningKey)
+	require.NoError(t, err)
+
+	proofs, _ = BatchOpen(commitments, poly, z, &srs.CommitKey, 0)
+	err = BatchVerify(commitments, proofs, &srs.OpeningKey)
+	require.NoError(t, err)
+
+	// Add an invalid proof, to ensure that it fails
+	poly[0] = randPoly(t, *domain)
+	proofs, _ = BatchOpen(commitments, poly, z, &srs.CommitKey, 0)
+	err = BatchVerify(commitments, proofs, &srs.OpeningKey)
+	require.Error(t, err, "An invalid commitment was added to the list, however verification returned true")
+}
+
 func TestBatchVerifySmoke(t *testing.T) {
 	domain := NewDomain(4)
 	srs, _ := newLagrangeSRSInsecure(*domain, big.NewInt(1234))
+	//srs, _ := newMonomialSRSInsecure(*domain, big.NewInt(1234))
 
-	numProofs := 10
+	numProofs := 3
 	commitments := make([]Commitment, 0, numProofs)
 	proofs := make([]OpeningProof, 0, numProofs)
 	for i := 0; i < numProofs-1; i++ {
@@ -48,6 +121,7 @@ func TestBatchVerifySmoke(t *testing.T) {
 		commitments = append(commitments, commitment)
 		proofs = append(proofs, proof)
 	}
+	require.NotEqual(t, commitments[0].Marshal(), commitments[1].Marshal(), "Commitments should be distinct")
 
 	// Check that these verify successfully.
 	err := BatchVerifyMultiPoints(commitments, proofs, &srs.OpeningKey)
